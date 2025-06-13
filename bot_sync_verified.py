@@ -20,10 +20,6 @@ ib = IB()
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
-# Connect synchronously (do NOT use await)
-ib.connect("127.0.0.1", 7497, clientId=22)
-
-
 print("🚀 Running FULLY SYNC CLEAN VERSION")
 
 # Load environment (automatically from Railway or local .env)
@@ -105,7 +101,7 @@ def webhook():
             print(f"🧪 TEST MODE: {side} {qty} {symbol} at {entry}")
             return jsonify({"status": "test", "message": "Simulation successful"}), 200
 
-        ib.connect("127.0.0.1", 7497, clientId=22)
+        ib.connect("YOUR_VPS_PUBLIC_IP", 4002, clientId=22)
         if not ib.isConnected():
             return jsonify({"error": "IBKR not connected"}), 500
 
