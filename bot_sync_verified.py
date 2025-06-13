@@ -10,6 +10,13 @@ import smtplib
 from email.message import EmailMessage
 from dotenv import load_dotenv
 
+import asyncio
+from ib_insync import *
+
+ib = IB()
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 print("🚀 Running FULLY SYNC CLEAN VERSION")
 
 # Load environment (automatically from Railway or local .env)
