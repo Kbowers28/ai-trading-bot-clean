@@ -84,6 +84,8 @@ def log_trade(symbol, entry, qty, stop_loss, take_profit, side, reason="entry"):
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
+        asyncio.set_event_loop(asyncio.new_event_loop())  # ✅ Add this line
+
         data = request.get_json(force=True)
         token = data.get("token")
 
@@ -96,10 +98,6 @@ def webhook():
         stop = float(data.get("stop"))
         qty = calculate_qty(entry, stop, RISK_PERCENT, ACCOUNT_SIZE)
         tp = entry + (entry - stop) * 2 if side == "BUY" else entry - (stop - entry) * 2
-
-        if TEST_MODE:
-            print(f"🧪 TEST MODE: {side} {qty} {symbol} at {entry}")
-            return jsonify({"status": "test", "message": "Simulation successful"}), 200
 
         ib.connect("YOUR_VPS_PUBLIC_IP", 4002, clientId=22)
         if not ib.isConnected():
