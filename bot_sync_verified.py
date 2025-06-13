@@ -2,6 +2,7 @@
 from flask import Flask, request, jsonify
 from ib_insync import *
 import asyncio
+import requests
 import traceback
 from datetime import datetime
 import pytz
@@ -14,8 +15,14 @@ import asyncio
 from ib_insync import *
 
 ib = IB()
+
+# Create a new event loop
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
+
+# Connect synchronously (do NOT use await)
+ib.connect("127.0.0.1", 7497, clientId=22)
+
 
 print("🚀 Running FULLY SYNC CLEAN VERSION")
 
@@ -83,6 +90,7 @@ def webhook():
     try:
         data = request.get_json(force=True)
         token = data.get("token")
+
         if token != SECRET_TOKEN:
             return jsonify({"error": "unauthorized"}), 403
 
@@ -111,6 +119,7 @@ def webhook():
             takeProfitPrice=tp,
             stopLossPrice=stop
         )
+
         bracket[0].transmit = False
         bracket[1].transmit = True
         bracket[2].transmit = True
@@ -118,15 +127,11 @@ def webhook():
         for order in bracket:
             ib.placeOrder(contract, order)
 
-        send_email("Trade Executed", f"{side} {qty} {symbol} @ {entry}")
-        log_trade(symbol, entry, qty, stop, tp, side)
-        return jsonify({"status": "success"}), 200
+        return jsonify({"status": "success", "message": "Order sent"}), 200
 
     except Exception as e:
-        error_msg = str(e)
-        send_email("Bot Error", error_msg)
-        print("❌ Error:", error_msg)
-        return jsonify({"error": error_msg}), 500
+        print("❌ Error:", str(e))
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=80)
