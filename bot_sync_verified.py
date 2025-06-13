@@ -99,7 +99,7 @@ def webhook():
         qty = calculate_qty(entry, stop, RISK_PERCENT, ACCOUNT_SIZE)
         tp = entry + (entry - stop) * 2 if side == "BUY" else entry - (stop - entry) * 2
 
-        ib.connect("YOUR_VPS_PUBLIC_IP", 4002, clientId=22)
+        ib.connect("209.145.57.242", 4002, clientId=22)
         if not ib.isConnected():
             return jsonify({"error": "IBKR not connected"}), 500
 
