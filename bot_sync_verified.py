@@ -37,7 +37,8 @@ app = Flask(__name__)
 
 ib = IB()
 
-@app.before_request
+open_orders = {}
+
 def catch_all_requests():
     print("📩 Incoming Request")
     print("Method:", request.method)
@@ -69,27 +70,35 @@ def calculate_qty(entry, stop, risk_pct, account_size):
     stop_diff = abs(entry - stop)
     return max(1, int(risk_amount / stop_diff)) if stop_diff else 1
 
-def log_trade(symbol, entry, qty, stop_loss, take_profit, side, reason="entry"):
+def log_trade(symbol, entry, qty, stop_loss, take_profit, side, reason="entry", status="open", exit_price="", pnl=""):
     now = datetime.now()
     trade_data = [
-        now.strftime("%Y-%m-%d"),
-        now.strftime("%H:%M:%S"),
-        symbol,
-        side,
-        qty,
-        round(entry, 2),
-        round(stop_loss, 2),
-        round(take_profit, 2),
-        reason
+        now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), symbol, side, qty,
+        round(entry, 2), round(stop_loss, 2), round(take_profit, 2), reason,
+        status, exit_price, pnl
     ]
-    header = ["Date", "Time", "Symbol", "Side", "Quantity", "Entry Price", "Stop Loss", "Take Profit", "Reason"]
+    header = [
+        "Date", "Time", "Symbol", "Side", "Quantity", "Entry Price", "Stop Loss", "Take Profit",
+        "Reason", "Status", "Exit Price", "PnL"
+    ]
     file_exists = os.path.isfile(TRADE_LOG_FILE)
-
     with open(TRADE_LOG_FILE, mode='a', newline='') as file:
         writer = csv.writer(file)
         if not file_exists:
             writer.writerow(header)
         writer.writerow(trade_data)
+
+def handle_order_status(order):
+    if order.orderId in open_orders:
+        symbol, qty, entry, stop, tp, side = open_orders[order.orderId]
+        if order.status in ["Filled", "Cancelled"]:
+            exit_price = order.lmtPrice if order.lmtPrice else ""
+            status = order.status.lower()
+            pnl = (float(exit_price) - entry) * qty if side == "BUY" else (entry - float(exit_price)) * qty
+            log_trade(symbol, entry, qty, stop, tp, side, reason="exit", status=status, exit_price=exit_price, pnl=round(pnl, 2))
+            del open_orders[order.orderId]
+
+ib.orderStatusEvent += handle_order_status
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -98,7 +107,6 @@ def webhook():
 
         data = request.get_json(force=True)
         token = data.get("token")
-
         if token != SECRET_TOKEN:
             return jsonify({"error": "unauthorized"}), 403
 
@@ -129,7 +137,8 @@ def webhook():
         bracket[2].transmit = True
 
         for order in bracket:
-            ib.placeOrder(contract, order)
+            trade = ib.placeOrder(contract, order)
+            open_orders[order.orderId] = (symbol, qty, entry, stop, tp, side)
 
         log_trade(symbol, entry, qty, stop, tp, side)
         return jsonify({"status": "success", "message": "Order sent"}), 200
