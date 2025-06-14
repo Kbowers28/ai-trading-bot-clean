@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 from ib_insync import *
 import asyncio
@@ -10,9 +9,8 @@ import os
 import smtplib
 from email.message import EmailMessage
 from dotenv import load_dotenv
-
-import asyncio
-from ib_insync import *
+import csv
+import os
 
 ib = IB()
 
@@ -60,12 +58,7 @@ def send_email(subject, text):
         response = requests.post(
             f"https://api.mailgun.net/v3/{MAILGUN_DOMAIN}/messages",
             auth=("api", MAILGUN_API_KEY),
-            data={
-                "from": EMAIL_SENDER,
-                "to": EMAIL_RECEIVER,
-                "subject": subject,
-                "text": text
-            }
+            data={"from": EMAIL_SENDER, "to": EMAIL_RECEIVER, "subject": subject, "text": text}
         )
         print("📧 Email sent:", response.status_code)
     except Exception as e:
@@ -78,13 +71,30 @@ def calculate_qty(entry, stop, risk_pct, account_size):
 
 def log_trade(symbol, entry, qty, stop_loss, take_profit, side, reason="entry"):
     now = datetime.now()
-    with open(TRADE_LOG_FILE, mode='a') as file:
-        file.write(f"{now},{symbol},{side},{qty},{entry},{stop_loss},{take_profit},{reason}\n")
+    trade_data = [
+        now.strftime("%Y-%m-%d"),
+        now.strftime("%H:%M:%S"),
+        symbol,
+        side,
+        qty,
+        round(entry, 2),
+        round(stop_loss, 2),
+        round(take_profit, 2),
+        reason
+    ]
+    header = ["Date", "Time", "Symbol", "Side", "Quantity", "Entry Price", "Stop Loss", "Take Profit", "Reason"]
+    file_exists = os.path.isfile(TRADE_LOG_FILE)
+
+    with open(TRADE_LOG_FILE, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        if not file_exists:
+            writer.writerow(header)
+        writer.writerow(trade_data)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
-        asyncio.set_event_loop(asyncio.new_event_loop())  # ✅ Add this line
+        asyncio.set_event_loop(asyncio.new_event_loop())
 
         data = request.get_json(force=True)
         token = data.get("token")
@@ -121,6 +131,7 @@ def webhook():
         for order in bracket:
             ib.placeOrder(contract, order)
 
+        log_trade(symbol, entry, qty, stop, tp, side)
         return jsonify({"status": "success", "message": "Order sent"}), 200
 
     except Exception as e:
