@@ -23,6 +23,9 @@ print("🚀 Running FULLY SYNC CLEAN VERSION")
 # Load environment (automatically from Railway or local .env)
 load_dotenv()
 
+SECRET_TOKEN = os.getenv("SECRET_TOKEN")
+print("✅ Loaded SECRET_TOKEN:", SECRET_TOKEN)
+
 MAILGUN_API_KEY = os.getenv("MAILGUN_API_KEY")
 MAILGUN_DOMAIN = os.getenv("MAILGUN_DOMAIN")
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
