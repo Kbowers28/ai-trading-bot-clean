@@ -107,8 +107,16 @@ def webhook():
 
         data = request.get_json(force=True)
         token = data.get("token")
+
+        print("🔔 Incoming Webhook")
+        print("Token received:", token)
+        print("Expected token:", SECRET_TOKEN)
+
         if token != SECRET_TOKEN:
+            print("❌ Invalid token — rejecting request")
             return jsonify({"error": "unauthorized"}), 403
+
+        print("✅ Token matched — processing trade:", data)
 
         symbol = data.get("symbol")
         side = data.get("side")
@@ -119,6 +127,7 @@ def webhook():
 
         ib.connect("127.0.0.1", 4002, clientId=22)
         if not ib.isConnected():
+            print("❌ IBKR connection failed")
             return jsonify({"error": "IBKR not connected"}), 500
 
         contract = Stock(symbol, "SMART", "USD")
@@ -141,10 +150,11 @@ def webhook():
             open_orders[order.orderId] = (symbol, qty, entry, stop, tp, side)
 
         log_trade(symbol, entry, qty, stop, tp, side)
+        print("✅ Order logged and sent")
         return jsonify({"status": "success", "message": "Order sent"}), 200
 
     except Exception as e:
-        print("❌ Error:", str(e))
+        print("❌ Webhook error:", str(e))
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
