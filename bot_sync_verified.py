@@ -107,7 +107,6 @@ ib.orderStatusEvent += handle_order_status
 def webhook():
     try:
         asyncio.set_event_loop(asyncio.new_event_loop())
-
         data = request.get_json(force=True)
         token = data.get("token")
 
@@ -119,46 +118,69 @@ def webhook():
             print("❌ Invalid token — rejecting request")
             return jsonify({"error": "unauthorized"}), 403
 
-        print("✅ Token matched — processing trade:", data)
-
         symbol = data.get("symbol")
-        side = data.get("side")
+        side = data.get("side").upper()
         entry = float(data.get("entry"))
         stop = float(data.get("stop"))
         qty = calculate_qty(entry, stop, RISK_PERCENT, ACCOUNT_SIZE)
         tp = entry + (entry - stop) * 2 if side == "BUY" else entry - (stop - entry) * 2
 
-        ib.connect("127.0.0.1", 4002, clientId=22)
+        print(f"✅ Processing {side} order for {symbol} | Qty: {qty} | Entry: {entry} | Stop: {stop} | TP: {tp}")
+
+        try:
+            ib.connect("127.0.0.1", 4002, clientId=22)
+        except Exception as connect_err:
+            print(f"❌ Failed to connect to IBKR: {connect_err}")
+            return jsonify({"error": "Failed to connect to IBKR"}), 500
+
         if not ib.isConnected():
-            print("❌ IBKR connection failed")
+            print("❌ IBKR not connected after attempt")
             return jsonify({"error": "IBKR not connected"}), 500
 
-        contract = Stock(symbol, "SMART", "USD")
-        ib.qualifyContracts(contract)
+        try:
+            contract = Stock(symbol, "SMART", "USD")
+            ib.qualifyContracts(contract)
+        except Exception as qerr:
+            print(f"❌ Failed to qualify contract: {qerr}")
+            return jsonify({"error": "Contract qualification failed"}), 500
 
-        bracket = ib.bracketOrder(
-            action=side,
-            quantity=qty,
-            limitPrice=entry,
-            takeProfitPrice=tp,
-            stopLossPrice=stop
-        )
+        try:
+            bracket = ib.bracketOrder(
+                action=side,
+                quantity=qty,
+                limitPrice=entry,
+                takeProfitPrice=tp,
+                stopLossPrice=stop
+            )
 
-        bracket[0].transmit = False
-        bracket[1].transmit = True
-        bracket[2].transmit = True
+            bracket[0].transmit = False
+            bracket[1].transmit = True
+            bracket[2].transmit = True
 
-        for order in bracket:
-            trade = ib.placeOrder(contract, order)
-            open_orders[order.orderId] = (symbol, qty, entry, stop, tp, side)
+            for order in bracket:
+                trade = ib.placeOrder(contract, order)
+                print(f"📤 Sent order ID {order.orderId} | Status: {trade.orderStatus.status}")
+                if trade.orderStatus.status != "Submitted":
+                    print("⚠️ Order was not submitted successfully:", trade.orderStatus.status)
+                open_orders[order.orderId] = (symbol, qty, entry, stop, tp, side)
 
-        log_trade(symbol, entry, qty, stop, tp, side)
-        print("✅ Order logged and sent")
-        return jsonify({"status": "success", "message": "Order sent"}), 200
+            log_trade(symbol, entry, qty, stop, tp, side)
+            print("✅ Trade successfully logged and orders placed.")
+            return jsonify({"status": "success", "message": "Order sent"}), 200
+
+        except Exception as place_err:
+            print("❌ Error placing order:", str(place_err))
+            return jsonify({"error": f"Order failed: {str(place_err)}"}), 500
 
     except Exception as e:
         print("❌ Webhook error:", str(e))
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+    finally:
+        ib.disconnect()
+        print("🔌 Disconnected from IBKR")
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=80)
+    app.run(host="0.0.0.0", port=5000)
